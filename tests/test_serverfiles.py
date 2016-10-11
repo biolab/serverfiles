@@ -22,7 +22,7 @@ def create(name, contents):
         f.write(contents)
 
 
-def server(path):
+def server(path, info):
     os.chdir(path)
 
     os.mkdir("domain1")
@@ -45,6 +45,13 @@ def server(path):
     os.remove("intar")
     create(("comp", "tar.gz.info"), '{"compression": "tar.gz"}')
 
+    if info:
+        create(("__INFO__",), '''[[["comp", "gz"], {"compression": "gz"}],
+[["comp", "bz2"], {"compression": "bz2"}],
+[["domain1", "withoutinfo"], {}],
+[["comp", "tar.gz"], {"compression": "tar.gz"}],
+[["domain1", "withinfo"], {"tags": "search", "datetime": "2013-07-03 11:39:07.381031"}]]''')
+
     httpd = HTTPServer(("", 12345),  SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
@@ -54,7 +61,7 @@ class TestServerFiles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pathserver = tempfile.mkdtemp()
-        cls.http = multiprocessing.Process(target=server, args=[cls.pathserver])
+        cls.http = multiprocessing.Process(target=server, args=[cls.pathserver, False])
         cls.http.daemon = True
         cls.http.start()
 
@@ -155,3 +162,14 @@ class TestServerFiles(unittest.TestCase):
         self.assertEqual(len(self.lf.search("domain1")), 2)
         self.assertEqual(len(self.sf.search("domain1")), 2)
         self.assertEqual(self.sf.search("search"), [("domain1", "withinfo")])
+
+
+class TestServerFilesInfo(TestServerFiles):
+    """ Repeats the same tests with __INFO__ file. """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pathserver = tempfile.mkdtemp()
+        cls.http = multiprocessing.Process(target=server, args=[cls.pathserver, True])
+        cls.http.daemon = True
+        cls.http.start()
