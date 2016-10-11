@@ -76,6 +76,12 @@ class TestServerFiles(unittest.TestCase):
 
     def setUp(self):
         self.sf = serverfiles.ServerFiles(server="http://localhost:12345/")
+        while True: #wait for server process to come online
+            try:
+                self.sf.info("domain1", "withinfo")
+                break
+            except:
+                pass
         self.path = tempfile.mkdtemp()
         self.lf = serverfiles.LocalFiles(path=self.path, serverfiles=self.sf)
 
