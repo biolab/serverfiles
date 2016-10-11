@@ -1,13 +1,5 @@
 """
-
-Orange server files were created to store large files that do not
-come with Orange installation, but may be required for
-specific functionality. A typical example is Orange Bioinformatics
-add-on, which relies on large data files storing genome information.
-These do not come pre-installed, but are rather downloaded from the server
-when needed and are stored locally. The module provides functionality for
-managing these files.
-
+Access and store files when needed.
 
 Server with files
 =================
@@ -34,11 +26,11 @@ Then we can start a test server with::
 
 To access the server and download the file we could use::
 
-  >>> import Orange.misc.serverfiles as serverfiles
+  >>> import serverfiles
   >>> sf = serverfiles.ServerFiles(server="http://localhost:8000/")
   >>> sf.listfiles()
   [('additional-data', 'a-very-big-file.txt')]
-  >>> lf = serverfiles.LocalFiles(serverfiles=sf)
+  >>> lf = serverfiles.LocalFiles("sftest", serverfiles=sf)
   >>> lf.download('additional-data', 'a-very-big-file.txt')
 
 
@@ -64,7 +56,7 @@ If such file exists its contents will be used instead of server queries
 for file listing and info lookup, which is critical for high latency
 connections. Such file can be prepared as:
 
->>> sf = ServerFiles() #add server=your server
+>>> sf = ServerFiles(server="yourserver")
 >>> json.dump(list(sf.allinfo().items()), open("__INFO__", "wt"))
 
 If your server already has an __INFO__ file, the above code will just get
@@ -103,14 +95,9 @@ import shutil
 import requests
 import requests.exceptions
 
-from Orange.misc.environ import data_dir
-
 
 # default socket timeout in seconds
 TIMEOUT = 5
-
-
-defserver = "http://193.2.72.57/newsf/"
 
 
 def _open_file_info(fname):
@@ -159,9 +146,7 @@ class _FindLinksParser(HTMLParser):
 class ServerFiles:
     """A class for listing or downloading files from the server."""
 
-    def __init__(self, username=None, password=None, server=None):
-        if not server:
-            server = defserver
+    def __init__(self, server, username=None, password=None):
         self.server = server
         """Server URL."""
         self.username = username
@@ -321,16 +306,12 @@ def _split_path(head):
 class LocalFiles:
     """Manage local files."""
 
-    def __init__(self, path=None, serverfiles=None):
+    def __init__(self, path, serverfiles=None):
         self.serverfiles_dir = path
         """A folder downloaded files are stored in."""
-        if self.serverfiles_dir is None:
-            self.serverfiles_dir = os.path.join(data_dir(), "serverfiles")
         _create_path(self.serverfiles_dir)
         self.serverfiles = serverfiles
         """A ServerFiles instance."""
-        if self.serverfiles is None:
-            self.serverfiles = ServerFiles()
 
     @contextmanager
     def _lock_file(self, *args):
