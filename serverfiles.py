@@ -1,8 +1,4 @@
 """
-Server files (``serverfiles``)
-==============================
-
-.. index:: server files
 
 Orange server files were created to store large files that do not
 come with Orange installation, but may be required for
@@ -12,19 +8,61 @@ These do not come pre-installed, but are rather downloaded from the server
 when needed and are stored locally. The module provides functionality for
 managing these files.
 
-Server provides files through HTTP with directory indices. Files
-can be organised in subfolders. Each file can have
-a corresponding info file (with .info extension). The file
-must be formatted as a JSON dictionary. The most important keys are
-datetime ("%Y-%m-%d %H:%M:%S"), compression (if set, the file is
-uncompressed automatically, can be one of .bz2, .gz, .tar.gz, .tar.bz2),
-and tags (a list of strings).
+
+Server with files
+=================
+
+Server provides files through HTTP. Any HTTP server that can serve
+static files can work, including Apache, Nginx and Python's HTTP server.
+
+Files can be organized in subfolders. Each file can have a
+corresponding info file (with .info extension).
+
+A test server could be made by just creating a new empty folder and
+creating a subfolder "additional-data" there with the following files::
+
+  additional-data/a-very-big-file.txt
+  additional-data/a-very-big-file.txt.info
+
+Our .info file should contain the following::
+
+  {"tags": [ "huge file", "example" ], "datetime": "2016-10-10 11:39:07"}
+
+Then we can start a test server with::
+
+  python -m http.server
+
+To access the server and download the file we could use::
+
+  >>> import Orange.misc.serverfiles as serverfiles
+  >>> sf = serverfiles.ServerFiles(server="http://localhost:8000/")
+  >>> sf.listfiles()
+  [('additional-data', 'a-very-big-file.txt')]
+  >>> lf = serverfiles.LocalFiles(serverfiles=sf)
+  >>> lf.download('additional-data', 'a-very-big-file.txt')
+
+
+Info files
+===========
+
+Info files, which have an additional .info extension,
+must be SON dictionaries. Keys that are read by this module are:
+
+* datetime ("%Y-%m-%d %H:%M:%S"),
+
+* compression (if set, the file is uncompressed automatically,
+  can be one of .bz2, .gz, .tar.gz, .tar.bz2),
+
+* and tags (a list of strings).
+
+Server query optimization
+=========================
 
 A server can contain a __INFO__ file in its root folder. This file is
 a JSON list, whose elements are lists of [ list-of-path, info dictionary ].
 If such file exists its contents will be used instead of server queries
 for file listing and info lookup, which is critical for high latency
-connections. Such file can be prepared:
+connections. Such file can be prepared as:
 
 >>> sf = ServerFiles() #add server=your server
 >>> json.dump(list(sf.allinfo().items()), open("__INFO__", "wt"))
@@ -33,16 +71,17 @@ If your server already has an __INFO__ file, the above code will just get
 its contents.
 
 
-Local file management
-=====================
+Remote files
+============
 
 .. autoclass:: ServerFiles
     :members:
 
-Remote file management
-======================
 
-.. autoclass:: ServerFiles
+Local files
+===========
+
+.. autoclass:: LocalFiles
     :members:
 
 """
@@ -118,18 +157,17 @@ class _FindLinksParser(HTMLParser):
 
 
 class ServerFiles:
+    """A class for listing or downloading files from the server."""
 
     def __init__(self, username=None, password=None, server=None):
-        """
-        Creates a ServerFiles instance. Pass your username and password
-        to use the repository as an authenticated user. If you want to use
-        your access code (as an non-authenticated user), pass it also.
-        """
         if not server:
             server = defserver
         self.server = server
+        """Server URL."""
         self.username = username
+        """Username for authenticated HTTP queried."""
         self.password = password
+        """Password for authenticated HTTP queried."""
 
         self.req = requests.Session()
         a = requests.adapters.HTTPAdapter(max_retries=2)
@@ -210,6 +248,7 @@ class ServerFiles:
             callback()
 
     def allinfo(self, *path, recursive=True):
+        """Return all info files in a dictionary, where keys are paths."""
         self._download_server_info()
         files = self.listfiles(*path, recursive=recursive)
         infos = {}
@@ -280,13 +319,16 @@ def _split_path(head):
 
 
 class LocalFiles:
+    """Manage local files."""
 
     def __init__(self, path=None, serverfiles=None):
         self.serverfiles_dir = path
+        """A folder downloaded files are stored in."""
         if self.serverfiles_dir is None:
             self.serverfiles_dir = os.path.join(data_dir(), "serverfiles")
         _create_path(self.serverfiles_dir)
         self.serverfiles = serverfiles
+        """A ServerFiles instance."""
         if self.serverfiles is None:
             self.serverfiles = ServerFiles()
 
@@ -315,11 +357,10 @@ class LocalFiles:
 
     @_locked
     def download(self, *path, callback=None, extract=True):
-        """Downloads file from the repository to local orange installation.
-        To download files as an authenticated user you should also pass an
-        instance of ServerFiles class. Callback can be a function without
-        arguments. It will be called once for each downloaded percent of
-        file: 100 times for the whole file."""
+        """Download file from the repository. Callback can be a function without
+        arguments and will be called once for each downloaded percent of
+        file: 100 times for the whole file. If extract is True, files
+        marked as compressed will be uncompressed after download."""
 
         info = self.serverfiles.info(*path)
 
@@ -378,14 +419,12 @@ class LocalFiles:
         return files
 
     def info(self, *path):
-        """Returns info of a file in a local repository."""
+        """Return .info file for a file in a local repository."""
         target = self.localpath(*path)
         return _open_file_info(target + '.info')
 
     def allinfo(self, *path):
-        """Goes through all files in a domain on a local repository and returns a
-        dictionary, where keys are names of the files and values are their
-        information."""
+        """Return all local info files in a dictionary, where keys are paths."""
         files = self.listfiles(*path)
         dic = {}
         for filename in files:
@@ -393,7 +432,7 @@ class LocalFiles:
         return dic
 
     def needs_update(self, *path):
-        """True if a file does not exist in the local repository
+        """Return True if a file does not exist in the local repository,
         if there is a newer version on the server or if either
         version can not be determined."""
         dt_fmt = "%Y-%m-%d %H:%M:%S"
@@ -410,8 +449,8 @@ class LocalFiles:
             return True
 
     def update(self, *path, **kwargs):
-        """Downloads the corresponding file from the server and places it in
-        the local repository if the server copy is updated.
+        """Download the corresponding file from the server if server
+        copy was updated.
         """
         if self.needs_update(*path):
             self.download(*path, **kwargs)
@@ -430,7 +469,7 @@ class LocalFiles:
 
     @_locked
     def remove(self, *path):
-        """"Remove a file of a path from local repository."""
+        """Remove a file of a path from local repository."""
         path = self.localpath(*path)
         if os.path.exists(path + ".info"):
             try:
