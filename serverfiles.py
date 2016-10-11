@@ -20,6 +20,19 @@ datetime ("%Y-%m-%d %H:%M:%S"), compression (if set, the file is
 uncompressed automatically, can be one of .bz2, .gz, .tar.gz, .tar.bz2),
 and tags (a list of strings).
 
+A server can contain a __INFO__ file in its root folder. This file is
+a JSON list, whose elements are lists of [ list-of-path, info dictionary ].
+If such file exists its contents will be used instead of server queries
+for file listing and info lookup, which is critical for high latency
+connections. Such file can be prepared:
+
+>>> sf = ServerFiles() #add server=your server
+>>> json.dump(list(sf.allinfo().items()), open("__INFO__", "wt"))
+
+If your server already has an __INFO__ file, the above code will just get
+its contents.
+
+
 Local file management
 =====================
 
@@ -58,7 +71,6 @@ from Orange.misc.environ import data_dir
 TIMEOUT = 5
 
 
-#defserver = "http://localhost:9998/"
 defserver = "http://193.2.72.57/newsf/"
 
 
@@ -77,6 +89,15 @@ def _create_path(target):
         os.makedirs(target)
     except OSError:
         pass
+
+
+def _is_prefix(pref, whole):
+    if len(pref) > len(whole):
+        return False
+    for a, b in zip(pref, whole):
+        if a != b:
+            return False
+    return True
 
 
 class _FindLinksParser(HTMLParser):
@@ -115,10 +136,23 @@ class ServerFiles:
         self.req.mount('https://', a)
         self.req.mount('http://', a)
 
-        self._searchinfo = None
+        # cached info for all files on server
+        # None is not loaded, False if it does not exist
+        self._info = None
+
+    def _download_server_info(self):
+        if self._info is None:
+            t = self._open("__INFO__")
+            if t.status_code == 200:
+                self._info = {tuple(a): b for a, b in json.loads(t.text)}
+            else:
+                self._info = False #do not check again
 
     def listfiles(self, *args, recursive=True):
         """Return a list of files on the server. Do not list .info files."""
+        self._download_server_info()
+        if self._info:
+            return [a for a in self._info.keys() if _is_prefix(args, a)]
         text = self._open(*args).text
         parser = _FindLinksParser()
         parser.feed(text)
@@ -176,7 +210,8 @@ class ServerFiles:
             callback()
 
     def allinfo(self, *path, recursive=True):
-        files = self.listfiles(*path, recursive=True)
+        self._download_server_info()
+        files = self.listfiles(*path, recursive=recursive)
         infos = {}
         for a in files:
             npath = a
@@ -192,12 +227,15 @@ class ServerFiles:
         information on files in repository is transfered on first call of
         this function.
         """
-        if not self._searchinfo:
-            self._searchinfo = self.allinfo()
-        return _search(self._searchinfo, sstrings, **kwargs)
+        if self._info is None or self._info is False:
+            self._info = self.allinfo()
+        return _search(self._info, sstrings, **kwargs)
 
     def info(self, *path):
         """Return a dictionary containing repository file info."""
+        self._download_server_info()
+        if self._info:
+            return self._info.get(path, {})
         path = list(path)
         path[-1] += ".info"
         t = self._open(*path)
@@ -452,23 +490,9 @@ def sizeformat(size):
 
 
 if __name__ == '__main__':
-    pass
     sf = ServerFiles()
     lf = LocalFiles()
-    print(sf.listfiles())
-    #sf.download("wtest file.txt", target="downloaded")
-    print("info", sf.info("ogrodje.py"))
-    #download("wtest file.txt")
-
-    lf1 = lf.listfiles()
-    lf1 = lf.listfiles("Affy")
-    print("list", lf1)
-    for f in lf1:
-        print(lf.info(*f))
-    lf.download("GO", "taxonomy.pickle")
-    print(sf.allinfo())
-    print(sf.search("draw"))
-    print(sf.search("test"))
-    print(sf.search("blabla"))
-
-    lf.remove("wtest file.txt")
+    info = sf.allinfo()
+    print(os.getcwd())
+    with open("__INFO__.json", "wt") as fo:
+        json.dump(list(info.items()), fo)
