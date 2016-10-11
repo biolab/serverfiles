@@ -10,6 +10,7 @@ import tempfile
 import gzip
 import bz2
 import tarfile
+import sys
 
 import serverfiles
 
@@ -51,6 +52,9 @@ def server(path, info):
 [["domain1", "withoutinfo"], {}],
 [["comp", "tar.gz"], {"compression": "tar.gz"}],
 [["domain1", "withinfo"], {"tags": "search", "datetime": "2013-07-03 11:39:07.381031"}]]''')
+
+    # http server outputs a line for every connection
+    sys.stderr = open(os.devnull, "w")
 
     httpd = HTTPServer(("", 12345),  SimpleHTTPRequestHandler)
     httpd.serve_forever()
