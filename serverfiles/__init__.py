@@ -79,7 +79,10 @@ Local files
 """
 
 import functools
-import urllib.parse
+try:
+    import urllib.parse as urlparse
+except ImportError:
+    import urlparse
 from contextlib import contextmanager
 import threading
 import os
@@ -89,11 +92,19 @@ import bz2
 import datetime
 import tempfile
 import json
-from html.parser import HTMLParser
+try:
+    from html.parser import HTMLParser
+except ImportError:
+    from HTMLParser import HTMLParser
 import shutil
 
 import requests
 import requests.exceptions
+
+try:
+    FileNotFoundError
+except:
+    FileNotFoundError = IOError
 
 
 # default socket timeout in seconds
@@ -126,10 +137,10 @@ def _is_prefix(pref, whole):
     return True
 
 
-class _FindLinksParser(HTMLParser):
+class _FindLinksParser(HTMLParser, object):
 
     def __init__(self):
-        super().__init__(self)
+        super(_FindLinksParser, self).__init__()
         self.links = []
 
     def handle_starttag(self, tag, attrs):
@@ -140,7 +151,7 @@ class _FindLinksParser(HTMLParser):
                     if value.startswith("?") or value.startswith("/") or \
                        value.startswith(".") or value.startswith("__"):
                         continue
-                    self.links.append(urllib.parse.unquote(value))
+                    self.links.append(urlparse.unquote(value))
 
 
 class ServerFiles:
@@ -171,8 +182,9 @@ class ServerFiles:
             else:
                 self._info = False #do not check again
 
-    def listfiles(self, *args, recursive=True):
+    def listfiles(self, *args, **kwargs):
         """Return a list of files on the server. Do not list .info files."""
+        recursive = kwargs.get("recursive", True)
         self._download_server_info()
         if self._info:
             return [a for a in self._info.keys() if _is_prefix(args, a)]
@@ -189,11 +201,13 @@ class ServerFiles:
                     files.extend([a for a in self.listfiles(*nargs, recursive=True)])
         return files
 
-    def download(self, *path, target=None, callback=None):
+    def download(self, *path, **kwargs):
         """
         Download a file and name it with target name. Callback
         is called once for each downloaded percentage.
         """
+        callback = kwargs.get("callback", None)
+        target = kwargs.get("target", None)
         _create_path(os.path.dirname(target))
 
         req = self._open(*path)
@@ -232,8 +246,9 @@ class ServerFiles:
         if callback:
             callback()
 
-    def allinfo(self, *path, recursive=True):
+    def allinfo(self, *path, **kwargs):
         """Return all info files in a dictionary, where keys are paths."""
+        recursive = kwargs.get("recursive", True)
         self._download_server_info()
         files = self.listfiles(*path, recursive=recursive)
         infos = {}
@@ -337,12 +352,13 @@ class LocalFiles:
         return os.path.join(os.path.expanduser(self.serverfiles_dir), *args)
 
     @_locked
-    def download(self, *path, callback=None, extract=True):
+    def download(self, *path, **kwargs):
         """Download file from the repository. Callback can be a function without
         arguments and will be called once for each downloaded percent of
         file: 100 times for the whole file. If extract is True, files
         marked as compressed will be uncompressed after download."""
-
+        extract = kwargs.get("extract", True)
+        callback = kwargs.get("callback", None)
         info = self.serverfiles.info(*path)
 
         extract = extract and "compression" in info

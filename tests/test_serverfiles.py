@@ -5,14 +5,24 @@ import unittest
 import multiprocessing
 import os
 import shutil
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+try:
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+except ImportError:
+    from SimpleHTTPServer import SimpleHTTPRequestHandler
+    from BaseHTTPServer import HTTPServer
 import tempfile
 import gzip
 import bz2
 import tarfile
 import sys
+import time
 
 import serverfiles
+
+try:
+    FileNotFoundError
+except:
+    FileNotFoundError = IOError
 
 
 DATETIMETEST = "2013-07-03 11:39:07.381031"
@@ -37,8 +47,8 @@ def server(path, info):
     with gzip.open(os.path.join("comp", "gz"), "wt") as f:
         f.write("compress")
     create(("comp", "gz.info"), '{"compression": "gz"}')
-    with bz2.open(os.path.join("comp", "bz2"), "wt") as f:
-        f.write("compress")
+    with bz2.BZ2File(os.path.join("comp", "bz2"), "w") as f: #Python 2.7 compatibility
+        f.write("compress".encode("ascii"))
     create(("comp", "bz2.info"), '{"compression": "bz2"}')
     create(("intar",), "compress")
     with tarfile.open(os.path.join("comp", "tar.gz"), "w") as tar:
@@ -76,7 +86,8 @@ class TestServerFiles(unittest.TestCase):
 
     def setUp(self):
         self.sf = serverfiles.ServerFiles(server="http://localhost:12345/")
-        while True: #wait for server process to come online
+        t = time.time()
+        while time.time() - t < 1.: #wait for at most 1 second for server process to come online
             try:
                 self.sf.info("domain1", "withinfo")
                 break
