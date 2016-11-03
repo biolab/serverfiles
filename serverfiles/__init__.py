@@ -216,8 +216,9 @@ class ServerFiles:
         elif req.status_code != 200:
             raise IOError
 
-        fdown = req.raw
-        size = int(fdown.getheader('content-length'))
+        size = req.headers.get('content-length')
+        if size:
+            size = int(size)
 
         f = tempfile.TemporaryFile()
 
@@ -225,23 +226,23 @@ class ServerFiles:
         lastchunkreport= 0.0001
 
         readb = 0
-        # in case size == 0 skip the loop
-        while size > 0:
-            buf = fdown.read(chunksize)
+
+        for buf in req.iter_content(chunksize):
             readb += len(buf)
-            while float(readb) / size > lastchunkreport+0.01:
+            while size and float(readb) / size > lastchunkreport+0.01:
                 lastchunkreport += 0.01
                 if callback:
                     callback()
-            if not buf:
-                break
             f.write(buf)
 
-        fdown.close()
         f.seek(0)
 
         with open(target, "wb") as fo:
             shutil.copyfileobj(f, fo)
+
+        if callback and not size: #size was unknown, call callbacks
+            for i in range(99):
+                callback()
 
         if callback:
             callback()
