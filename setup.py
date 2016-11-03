@@ -12,7 +12,7 @@ if __name__ == '__main__':
         install_requires=[
             'requests>=2.11.1',
         ],
-        version='0.1',
+        version='0.2',
         zip_safe=False,
         test_suite="tests.suite"
     )
