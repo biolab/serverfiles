@@ -2,11 +2,12 @@
 
 from setuptools import setup
 
+
 if __name__ == '__main__':
     setup(
         name='serverfiles',
-        description='',
-        author='Biolab',
+        description="An utility that accesses files on a HTTP server and stores them locally for reuse.",
+        author='Bioinformatics Laboratory, FRI UL',
         author_email='marko.toplak@fri.uni-lj.si',
         packages=["serverfiles"],
         install_requires=[
