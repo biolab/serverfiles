@@ -10,7 +10,7 @@ Welcome to ServerFiles's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   serverfiles
 
 Indices and tables
 ==================
