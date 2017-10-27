@@ -256,8 +256,7 @@ class ServerFiles:
         self._download_server_info()
         files = self.listfiles(*path, recursive=recursive)
         infos = {}
-        for a in files:
-            npath = a
+        for npath in files:
             infos[npath] = self.info(*npath)
         return infos
 
