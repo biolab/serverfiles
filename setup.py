@@ -15,5 +15,6 @@ if __name__ == '__main__':
         ],
         version='0.2.1',
         zip_safe=False,
+        url="https://github.com/biolab/serverfiles",
         test_suite="tests.suite"
     )
