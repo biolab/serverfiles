@@ -290,7 +290,7 @@ class ServerFiles:
         auth = None
         if self.username and self.password:
             auth = (self.username, self.password)
-        return self.req.get(root + "/".join(path), auth=auth, verify=False,
+        return self.req.get(root + "/".join(path), auth=auth,
                             timeout=TIMEOUT, stream=True)
 
     def _open(self, *args):
