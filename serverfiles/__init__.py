@@ -158,7 +158,10 @@ class ServerFiles:
     """A class for listing or downloading files from the server."""
 
     def __init__(self, server, username=None, password=None):
-        self.server = server
+        if server.endswith('/'):
+            self.server = server
+        else:
+            self.server = server + '/'
         """Server URL."""
         self.username = username
         """Username for authenticated HTTP queried."""
@@ -253,8 +256,7 @@ class ServerFiles:
         self._download_server_info()
         files = self.listfiles(*path, recursive=recursive)
         infos = {}
-        for a in files:
-            npath = a
+        for npath in files:
             infos[npath] = self.info(*npath)
         return infos
 
@@ -288,7 +290,8 @@ class ServerFiles:
         auth = None
         if self.username and self.password:
             auth = (self.username, self.password)
-        return self.req.get(root+"/".join(path), auth=auth, verify=False, timeout=TIMEOUT, stream=True)
+        return self.req.get(root + "/".join(path), auth=auth, verify=False,
+                            timeout=TIMEOUT, stream=True)
 
     def _open(self, *args):
         return self._server_request(self.server, *args)
