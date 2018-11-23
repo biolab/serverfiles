@@ -1,1 +1,4 @@
 include LICENSE.txt
+recursive-include doc *.rst Makefile *.bat *.py
+recursive-include tests *.py
+include requirements.txt
