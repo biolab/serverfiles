@@ -168,22 +168,18 @@ class ServerFiles:
         self.password = password
         """Password for authenticated HTTP queried."""
 
-        self.req = requests.Session()
-        a = requests.adapters.HTTPAdapter(max_retries=2)
-        self.req.mount('https://', a)
-        self.req.mount('http://', a)
-
         # cached info for all files on server
         # None is not loaded, False if it does not exist
         self._info = None
 
     def _download_server_info(self):
         if self._info is None:
-            t = self._open("__INFO__")
-            if t.status_code == 200:
-                self._info = {tuple(a): b for a, b in json.loads(t.text)}
+            response = self._open("__INFO__")
+            if response.status_code == 200:
+                self._info = {tuple(a): b for a, b in json.loads(response.text)}
             else:
                 self._info = False #do not check again
+            response.close()
 
     def listfiles(self, *args, **kwargs):
         """Return a list of files on the server. Do not list .info files."""
@@ -191,9 +187,10 @@ class ServerFiles:
         self._download_server_info()
         if self._info:
             return [a for a in self._info.keys() if _is_prefix(args, a)]
-        text = self._open(*args).text
+        response = self._open(*args)
         parser = _FindLinksParser()
-        parser.feed(text)
+        parser.feed(response.text)
+        response.close()
         links = parser.links
         files = [args + (f,) for f in links if not f.endswith("/") and not f.endswith(".info")]
         if recursive:
@@ -213,35 +210,35 @@ class ServerFiles:
         target = kwargs.get("target", None)
         _create_path(os.path.dirname(target))
 
-        req = self._open(*path)
-        if req.status_code == 404:
+        response = self._open(*path)
+        if response.status_code == 404:
             raise FileNotFoundError
-        elif req.status_code != 200:
+        elif response.status_code != 200:
             raise IOError
 
-        size = req.headers.get('content-length')
+        size = response.headers.get('content-length')
         if size:
             size = int(size)
 
-        f = tempfile.TemporaryFile()
+        with tempfile.TemporaryFile() as f:
+            chunksize = 1024*8
+            lastchunkreport= 0.0001
 
-        chunksize = 1024*8
-        lastchunkreport= 0.0001
+            readb = 0
 
-        readb = 0
+            for buf in response.iter_content(chunksize):
+                readb += len(buf)
+                while size and float(readb) / size > lastchunkreport+0.01:
+                    lastchunkreport += 0.01
+                    if callback:
+                        callback()
+                f.write(buf)
 
-        for buf in req.iter_content(chunksize):
-            readb += len(buf)
-            while size and float(readb) / size > lastchunkreport+0.01:
-                lastchunkreport += 0.01
-                if callback:
-                    callback()
-            f.write(buf)
+            f.seek(0)
+            with open(target, "wb") as fo:
+                shutil.copyfileobj(f, fo)
 
-        f.seek(0)
-
-        with open(target, "wb") as fo:
-            shutil.copyfileobj(f, fo)
+        response.close()
 
         if callback and not size: #size was unknown, call callbacks
             for i in range(99):
@@ -280,20 +277,23 @@ class ServerFiles:
             return self._info.get(path, {})
         path = list(path)
         path[-1] += ".info"
-        t = self._open(*path)
-        if t.status_code == 200:
-            return json.loads(t.text)
-        else:
-            return {}
+        response = self._open(*path)
 
-    def _server_request(self, root, *path):
+        _info = {}
+        if response.status_code == 200:
+            _info = json.loads(response.text)
+
+        response.close()
+        return _info
+
+    def _server_request(self, root, *path) -> requests.Response:
         auth = None
         if self.username and self.password:
             auth = (self.username, self.password)
-        return self.req.get(root + "/".join(path), auth=auth,
+        return requests.get(root + "/".join(path), auth=auth,
                             timeout=TIMEOUT, stream=True)
 
-    def _open(self, *args):
+    def _open(self, *args) -> requests.Response:
         return self._server_request(self.server, *args)
 
 
@@ -373,22 +373,26 @@ class LocalFiles:
 
         _save_file_info(target + '.info', info)
 
-        if extract:
-            if info.get("compression") in ["tar.gz", "tar.bz2"]:
-                f = tarfile.open(target + ".tmp")
+        if not extract:
+            return
+
+        if info.get("compression") in ["tar.gz", "tar.bz2"]:
+            with tarfile.open(target + ".tmp") as temp_fp:
                 try:
                     os.mkdir(target)
                 except OSError:
                     pass
-                f.extractall(target)
-            elif info.get("compression") == "gz":
-                f = gzip.open(target + ".tmp")
-                shutil.copyfileobj(f, open(target, "wb"))
-            elif info.get("compression") == "bz2":
-                f = bz2.BZ2File(target + ".tmp", "r")
-                shutil.copyfileobj(f, open(target, "wb"))
-            f.close()
-            os.remove(target + ".tmp")
+                temp_fp.extractall(target)
+        elif info.get("compression") == "gz":
+            with gzip.open(target + ".tmp") as temp_fp:
+                with open(target, "wb") as fp:
+                    shutil.copyfileobj(temp_fp, fp)
+        elif info.get("compression") == "bz2":
+            with bz2.BZ2File(target + ".tmp", "r") as temp_fp:
+                with open(target, "wb") as fp:
+                    shutil.copyfileobj(temp_fp, fp)
+
+        os.remove(target + ".tmp")
 
     @_locked
     def localpath_download(self, *path, **kwargs):
