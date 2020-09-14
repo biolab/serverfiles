@@ -290,8 +290,14 @@ class ServerFiles:
         auth = None
         if self.username and self.password:
             auth = (self.username, self.password)
-        return requests.get(root + "/".join(path), auth=auth,
-                            timeout=TIMEOUT, stream=True)
+
+        adapter = requests.adapters.HTTPAdapter(max_retries=3)
+        session = requests.Session()
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+
+        return session.get(root + "/".join(path), auth=auth,
+                           timeout=TIMEOUT, stream=True)
 
     def _open(self, *args) -> requests.Response:
         return self._server_request(self.server, *args)
