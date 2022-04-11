@@ -260,10 +260,10 @@ class ServerFiles:
     def search(self, sstrings, **kwargs):
         """
         Search for files on the repository where all substrings in a list
-        are contained in at least one choosen field (tag, title, name). Return
+        are contained in at least one chosen field (tag, title, name). Return
         a list of tuples: first tuple element is the file's domain, second its
         name. As for now the search is performed locally, therefore
-        information on files in repository is transfered on first call of
+        information on files in repository is transferred on first call of
         this function.
         """
         if self._info is None or self._info is False:
