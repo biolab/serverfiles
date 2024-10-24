@@ -82,6 +82,7 @@ class TestServerFiles(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.http.terminate()
+        time.sleep(0.1)
         shutil.rmtree(cls.pathserver)
 
     def setUp(self):
